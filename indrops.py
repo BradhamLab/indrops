@@ -388,13 +388,14 @@ class IndropsProject():
 
         # A small number of gene are flagged as having two different biotypes.
         gene_biotype_dict = defaultdict(set)
+        gene_feature_present = False
 
         # Read through GTF file once to get all gene names
         for line in subprocess.Popen(["gzip", "--stdout", "-d", gzipped_transcriptome_gtf], stdout=subprocess.PIPE).stdout:
             # Skip non-gene feature lines.
             if '\tgene\t' not in line:
                 continue
-                
+            gene_feature_present = True
             gene_biotype_match = re.search(r'gene_biotype \"(.*?)\";', line)
             gene_name_match = re.search(r'gene_name \"(.*?)\";', line)
             if gene_name_match and gene_biotype_match:
@@ -403,10 +404,6 @@ class IndropsProject():
                 
                 # Record biotype.
                 gene_biotype_dict[gene_name].add(gene_biotype)
-
-            elif gene_biotype_match is None and gene_name_match:
-                gene_name = gen_nanme_match.group(1)
-                gene_biotype_dict[gene_name].add('protein_coding')
 
         # Detect read-through genes by name. Name must be a fusion of two other gene names 'G1-G2'.
         readthrough_genes = set()
@@ -439,7 +436,7 @@ class IndropsProject():
             gene_name_match = re.search(r'gene_name \"(.*?)\";', line)
             if gene_name_match:
                 gene_name = gene_name_match.group(1)
-                if gene_name in valid_genes:
+                if gene_name in valid_genes or not gene_feature_present:
                     
                     # An unusual edgecase in the GTF for Danio Rerio rel89
                     if ' ' in gene_name:
@@ -467,51 +464,21 @@ class IndropsProject():
         self.project_check_dir(index_dir)
 
         genome_filename = os.path.join(index_dir, '.'.join(gzipped_genome_softmasked_fasta_filename.split('.')[:-1]))
-
-        gtf_filename = os.path.join(index_dir, gzipped_transcriptome_gtf.split('/')[-1])
-        gtf_prefix = '.'.join(gtf_filename.split('.')[:-2])
-        # gtf_with_genenames_in_transcript_id = gtf_prefix + '.annotated.gtf'
-        gtf_with_genenames_in_transcript_id = self.paths.bowtie_index + '.gtf'
-
-        print_to_stderr('Filtering GTF')
-        self.filter_gtf(gzipped_transcriptome_gtf, gtf_with_genenames_in_transcript_id)
-        # accepted_gene_biotypes_for_NA_transcripts = set(["protein_coding","IG_V_gene","IG_J_gene","TR_J_gene","TR_D_gene","TR_V_gene","IG_C_gene","IG_D_gene","TR_C_gene"])
-        # tsl1_or_tsl2_strings = ['transcript_support_level "1"', 'transcript_support_level "1 ', 'transcript_support_level "2"', 'transcript_support_level "2 ']
-        # tsl_NA =  'transcript_support_level "NA'
-
-        # def filter_ensembl_transcript(transcript_line):
-
-        #     line_valid_for_output = False
-        #     if mode == 'strict':
-        #         for string in tsl1_or_tsl2_strings:
-        #             if string in line:
-        #                 line_valid_for_output = True
-        #                 break
-        #         if tsl_NA in line:
-        #             gene_biotype = re.search(r'gene_biotype \"(.*?)\";', line)
-        #             if gene_biotype and gene_biotype.group(1) in accepted_gene_biotypes_for_NA_transcripts:
-        #                 line_valid_for_output = True
-        #         return line_valid_for_output
-
-        #     elif mode == 'all_ensembl':
-        #         line_valid_for_output = True
-        #         return line_valid_for_output
-
-
-
-        # print_to_stderr('Filtering GTF')
-        # output_gtf = open(gtf_with_genenames_in_transcript_id, 'w')
-        # for line in subprocess.Popen(["gzip", "--stdout", "-d", gzipped_transcriptome_gtf], stdout=subprocess.PIPE).stdout:
-        #     if 'transcript_id' not in line:
-        #         continue
-
-        #     if filter_ensembl_transcript(line):
-        #         gene_name = re.search(r'gene_name \"(.*?)\";', line)
-        #         if gene_name:
-        #             gene_name = gene_name.group(1)
-        #             out_line = re.sub(r'(?<=transcript_id ")(.*?)(?=";)', r'\1|'+gene_name, line)
-        #             output_gtf.write(out_line)
-        # output_gtf.close()
+        # check for gff3 file
+        if 'gff3' in os.path.split(gzipped_transcriptome_gtf):
+            print_to_stderr("Processing gff3 annotation file directly with "
+                            "RSEM, no filtering step as with ENSEMBL gtf.")
+            gtf_with_genenames_in_transcript_id = gzipped_transcriptome_gtf
+            anno_type = 'gff3'
+        else:
+            gtf_filename = os.path.join(index_dir, gzipped_transcriptome_gtf.split('/')[-1])
+            gtf_prefix = '.'.join(gtf_filename.split('.')[:-2])
+            gtf_with_genenames_in_transcript_id = self.paths.bowtie_index \
+                                                + '.gtf'
+            print_to_stderr('Filtering GTF')
+            self.filter_gtf(gzipped_transcriptome_gtf,
+                            gtf_with_genenames_in_transcript_id)
+            anno_type = 'gtf'
 
         print_to_stderr('Gunzipping Genome')
         p_gzip = subprocess.Popen(["gzip", "-dfc", gzipped_genome_softmasked_fasta_filename], stdout=open(genome_filename, 'wb'))
@@ -519,7 +486,7 @@ class IndropsProject():
             raise Exception(" Error in rsem-prepare reference ")
 
         p_rsem = subprocess.Popen([self.paths.rsem_prepare_reference, '--bowtie', '--bowtie-path', self.paths.bowtie_dir,
-                            '--gtf', gtf_with_genenames_in_transcript_id, 
+                            '--{}'.format(anno_type), gtf_with_genenames_in_transcript_id, 
                             '--polyA', '--polyA-length', '5', genome_filename, self.paths.bowtie_index])
 
         if p_rsem.wait() != 0:
