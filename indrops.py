@@ -404,6 +404,10 @@ class IndropsProject():
                 # Record biotype.
                 gene_biotype_dict[gene_name].add(gene_biotype)
 
+            elif gene_biotype_match is None and gene_name_match:
+                gene_name = gen_nanme_match.group(1)
+                gene_biotype_dict[gene_name].add('protein_coding')
+
         # Detect read-through genes by name. Name must be a fusion of two other gene names 'G1-G2'.
         readthrough_genes = set()
         for gene in gene_biotype_dict.keys():
