@@ -463,9 +463,14 @@ class IndropsProject():
         index_dir = os.path.dirname(self.paths.bowtie_index)
         self.project_check_dir(index_dir)
 
+        # rsem-prepare-reference fails if gtf file already exists:
+        print_to_stderr('Previous index gtf discovered. Removing.')
+        if os.path.exists(self.paths.bowtie_index + '.gtf'):
+            os.remove(self.paths.bowtie_index + '.gtf')
+
         genome_filename = os.path.join(index_dir, '.'.join(gzipped_genome_softmasked_fasta_filename.split('.')[:-1]))
         # check for gff3 file
-        if 'gff3' in os.path.split(gzipped_transcriptome_gtf):
+        if 'gff3' in os.path.split(gzipped_transcriptome_gtf)[-1]:
             print_to_stderr("Processing gff3 annotation file directly with "
                             "RSEM, no filtering step as with ENSEMBL gtf.")
             gtf_with_genenames_in_transcript_id = gzipped_transcriptome_gtf
@@ -481,13 +486,25 @@ class IndropsProject():
             anno_type = 'gtf'
 
         print_to_stderr('Gunzipping Genome')
-        p_gzip = subprocess.Popen(["gzip", "-dfc", gzipped_genome_softmasked_fasta_filename], stdout=open(genome_filename, 'wb'))
+        p_gzip = subprocess.Popen(["gzip", "-dfc",
+                                  gzipped_genome_softmasked_fasta_filename],
+                                  stdout=open(genome_filename, 'wb'))
         if p_gzip.wait() != 0:
             raise Exception(" Error in rsem-prepare reference ")
+        
+        if self.paths.bowtie_dir == '':
+            bowtie_path_args = ""
+        else:
+            bowtie_path_args = "--bowtie-path " + self.paths.bowtie_dir
 
-        p_rsem = subprocess.Popen([self.paths.rsem_prepare_reference, '--bowtie', '--bowtie-path', self.paths.bowtie_dir,
-                            '--{}'.format(anno_type), gtf_with_genenames_in_transcript_id, 
-                            '--polyA', '--polyA-length', '5', genome_filename, self.paths.bowtie_index])
+        rsem_args = [self.paths.rsem_prepare_reference,
+                     '--bowtie', bowtie_path_args,
+                     '--' + anno_type,
+                     gtf_with_genenames_in_transcript_id, 
+                     '--polyA', '--polyA-length', '5',
+                     genome_filename, self.paths.bowtie_index]
+        print_to_stderr("Running RSEM: " + " ".join(rsem_args))
+        p_rsem = subprocess.Popen(rsem_args)
 
         if p_rsem.wait() != 0:
             raise Exception(" Error in rsem-prepare reference ")

@@ -4,7 +4,7 @@ shell.prefix("source activate indrops; ")
 
 rule all:
     input:
-        config['bowtie_index']
+        index='{}.transcripts.fa'.format(config['bowtie_index'])
 
 rule demultiplex_bcl:
     output:
@@ -30,7 +30,7 @@ rule build_bowtie_index:
     params:
         indrops=os.path.join(config['indrops_dir'], 'indrops.py')
     output:
-        config['bowtie_index']
+        out='{}.transcripts.fa'.format(config['bowtie_index'])
     shell:
         "python {params.indrops} {input.yaml} build_index "
         "--genome-fasta-gz {input.fasta} --ensembl-gtf-gz {input.gtf}"
