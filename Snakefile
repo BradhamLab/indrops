@@ -15,12 +15,15 @@ def symlink_output(input_dir, output_dir):
                     for x in files]
     return output_files
 
+PROJECT_DIR = project_config['project_dir']
 BASECALLS = os.path.join(config['base_dir'], 'Data', 'Intensities', 'BaseCalls')
 RUN_LIBRARIES = []
+LIBRARIES = {}
 for each in project_config['sequencing_runs']:
     run = each['name']
     for lib in each['libraries']:
         RUN_LIBRARIES.append((run, lib['library_name']))
+        LIBRARIES[lib['library_name']] = lib['library_index']
 
 SPLITS = ['L001', 'L002', 'L003', 'L004']
 READS = ['R1', 'R2', 'R3', 'R4']
@@ -35,10 +38,11 @@ SYMLINKS = [os.path.join(config['base_dir'], 'fastq', os.path.split(x)[-1])\
 
 rule all:
     input:
-        [os.path.join(config['indrops_dir'], config['run_id'],
-                      "{run}_{library}_filtered.out".format(run=run,
-                                                            library=library))\
-         for run, library in RUN_LIBRARIES]
+        [os.path.join(PROJECT_DIR, '{library}'.format(library=run_lib[1]),
+        'filtered_parts', "{library}_{run}_{index}_{split}.fastq".format(
+            library=run_lib[1], run=run_lib[0], index=LIBRARIES[run_lib[1]], split=split))\
+        for run_lib, split in itertools.product(RUN_LIBRARIES, SPLITS)]
+        
 
 rule extract_fastqs:
     output:
@@ -82,14 +86,13 @@ rule filter_reads:
         symlinks=SYMLINKS,
         yaml=ancient(config['yaml'])
     output:
-        os.path.join(config['indrops_dir'], config['run_id'],
-                            "{run}_{library}_filtered.out")
+        [os.path.join(PROJECT_DIR, '{library}',
+        'filtered_parts', "{library}_{run}_{index}_" + "{split}.fastq".format(
+            split=split)) for split in SPLITS]
+    log:
+        "logs/{run}_{library}_{index}_filter.log"
     shell:
         """
-        if python indrops.py {input.yaml} filter --runs {wildcards.run} --libraries {wildcards.library}; then 
-            echo "Filtering complete!" > {output}
-        else
-            echo "Exit code $?, failure"
-        fi
+        (python indrops.py {input.yaml} filter --runs {wildcards.run} --libraries {wildcards.library}) > {log}
         """
     
