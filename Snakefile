@@ -41,7 +41,9 @@ rule all:
         [os.path.join(PROJECT_DIR, '{library}'.format(library=run_lib[1]),
         'filtered_parts', "{library}_{run}_{index}_{split}.fastq".format(
             library=run_lib[1], run=run_lib[0], index=LIBRARIES[run_lib[1]], split=split))\
-        for run_lib, split in itertools.product(RUN_LIBRARIES, SPLITS)]
+        for run_lib, split in itertools.product(RUN_LIBRARIES, SPLITS)],
+        ["logs/{run}_{library}_abundant.log".format(run=run, library=library)\
+        for run, library in RUN_LIBRARIES]
         
 
 rule extract_fastqs:
@@ -95,4 +97,19 @@ rule filter_reads:
         """
         (python indrops.py {input.yaml} filter --runs {wildcards.run} --libraries {wildcards.library}) > {log}
         """
-    
+
+rule abundant_barcodes:
+    input:
+        [os.path.join(PROJECT_DIR, '{library}'.format(library=run_lib[1]),
+        'filtered_parts', "{library}_{run}_{index}_{split}.fastq".format(
+            library=run_lib[1], run=run_lib[0], index=LIBRARIES[run_lib[1]], split=split))\
+        for run_lib, split in itertools.product(RUN_LIBRARIES, SPLITS)],
+        yaml=ancient(config['yaml'])
+    output:
+        os.path.join(PROJECT_DIR, "{library}", "{library}.filtering_stats.csv")
+    log:
+        "logs/{run}_{library}_abundant.log"
+    shell:
+        """
+        (python indrops.py {input.yaml} identify_abundant_barcodes --libraries {wildcards.library}) > {log};
+        """
