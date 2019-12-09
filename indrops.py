@@ -679,18 +679,20 @@ class IndropsLibrary():
         print_to_stderr("""[%s] This worker assigned %d out of %d total barcodes.""" % (self.name, len(barcodes_for_this_worker), len(sorted_barcode_names)))        
 
         for barcode in barcodes_for_this_worker:
+            print_to_stderr(barcode)
             barcode_fastq_filename = analysis_prefix+'%s.%s.fastq' % (self.name, barcode)
             print_to_stderr("  "+barcode_fastq_filename)
             with open(os.path.join(output_dir_path, barcode_fastq_filename), 'w') as f:
                 for line in self.get_reads_for_barcode(barcode, run_filter):
                     f.write(line)
+        print_to_stderr("Barcode fastq files written.")
 
     def quantify_expression(self, analysis_prefix='', max_reads=10**10, min_reads=750, min_counts=0, total_workers=1, worker_index=0, no_bam=False, run_filter=[]):
         if analysis_prefix:
             analysis_prefix = analysis_prefix + '.'
 
         sorted_barcode_names = self.sorted_barcode_names(min_reads=min_reads, max_reads=max_reads)
-        #print_to_stderr("   min_reads: %d sorted_barcode_names counts: %d" % (min_reads, len(sorted_barcode_names)))
+        print_to_stderr("   min_reads: %d sorted_barcode_names counts: %d" % (min_reads, len(sorted_barcode_names)))
 
         # Identify which barcodes belong to this worker
         barcodes_for_this_worker = []
@@ -823,10 +825,15 @@ class IndropsLibrary():
         print_to_stderr("{0:<8s}{1:<8s}{2:<10s}".format("Reads", "Counts", "Ambigs"))
         for barcode in barcodes_to_quantify:
             self.quantify_expression_for_barcode(barcode,
-                counts_output_filename, metrics_output_filename,
-                ambig_counts_output_filename, ambig_partners_output_filename,
-                no_bam=no_bam, write_header=(not header_written) and (worker_index==0), analysis_prefix=analysis_prefix,
-                min_counts = min_counts, run_filter=run_filter)
+                                                 counts_output_filename,
+                                                 metrics_output_filename,
+                                                 ambig_counts_output_filename,
+                                                 ambig_partners_output_filename,
+                                                 no_bam=no_bam,
+                                                 write_header=(not header_written) and (worker_index==0),
+                                                 analysis_prefix=analysis_prefix,
+                                                 min_counts=min_counts,
+                                                 run_filter=run_filter)
             header_written = True
         print_to_stderr("Per barcode quantification completed.")
 
@@ -885,6 +892,7 @@ class IndropsLibrary():
         if self.project.parameters['output_arguments']['output_unaligned_reads_to_other_fastq']:
             bowtie_cmd += ['--un', unaligned_reads_output]
 
+
         # Quantification command
         script_dir = os.path.dirname(os.path.realpath(__file__))
         quant_cmd = [self.project.paths.python, self.project.paths.quantify_umifm_from_alignments_py,
@@ -904,20 +912,26 @@ class IndropsLibrary():
             quant_cmd += ['--bam', aligned_bam]
         if write_header:
             quant_cmd += ['--write-header']
-
+        
         if self.project.parameters['umi_quantification_arguments']['split-ambigs']:
             quant_cmd.append('--split-ambig')
         if self.project.parameters['output_arguments']['filter_alignments_to_softmasked_regions']:
             quant_cmd += ['--soft-masked-regions', self.project.paths.bowtie_index + '.soft_masked_regions.pickle']
 
-        # Spawn processes
+        
 
+        # Spawn processes
+        print_to_stderr("Processes spawned...")
+        print_to_stderr("Bowtie command:\n\n" + ' '.join(bowtie_cmd) + '\n')
         p1 = subprocess.Popen(bowtie_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        print_to_stderr("Quant command: \n\n" + ' '.join(quant_cmd) + '\n')
         p2 = subprocess.Popen(quant_cmd, stdin=p1.stdout, stderr=subprocess.PIPE)
         
-                
+        n_line = 0
         for line in self.get_reads_for_barcode(barcode, run_filter=run_filter):
+            n_line += 1
             try:
+                print(n_line)
                 p1.stdin.write(line)
             except IOError as e:
                 print_to_stderr('\n')
@@ -1699,6 +1713,7 @@ if __name__=="__main__":
     else:
         target_libraries = project.libraries.keys()
     lib_query = set(target_libraries)
+    print_to_stderr("Target libaries: {}".format(lib_query))
 
     target_runs = []
     if args.runs:
@@ -1707,6 +1722,7 @@ if __name__=="__main__":
             target_runs.append(run)
     else:
         target_runs = project.runs.keys()
+    print_to_stderr("Target runs: {}".format(target_runs))
 
     target_library_parts = []
     for lib in target_libraries:
@@ -1725,7 +1741,6 @@ if __name__=="__main__":
         target_run_parts = []
         for run in target_runs:
             target_run_parts += [part for part in project.runs[run] if part.contains_library_in_query(lib_query)]
-
         for part in worker_filter(target_run_parts, args.worker_index, args.total_workers):
             print_to_stderr('Filtering run "%s", library "%s", part "%s"' % (part.run_name, part.library_name if hasattr(part, 'library_name') else 'N/A', part.part_name))
             part.filter_and_count_reads()
