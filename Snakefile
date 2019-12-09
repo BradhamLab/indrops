@@ -36,6 +36,14 @@ MULTIPLEXED = [os.path.join(BASECALLS,
 SYMLINKS = [os.path.join(config['base_dir'], 'fastq', os.path.split(x)[-1])\
             for x in MULTIPLEXED]
 
+def sorted_output(library):
+    out = os.path.join(PROJECT_DIR, library, 'filtered_parts',
+                       "{library}_{run}_{index}_{split}.fastq.sorted.fastq.gz")
+    for run, lib in RUN_LIBRARIES:
+        if lib == library:
+            return([out.format(library=lib, run=run, index=LIBRARIES[lib],
+                               split=split) for split in SPLITS])
+
 rule all:
     input:
         [os.path.join(PROJECT_DIR, '{library}'.format(library=run_lib[1]),
@@ -43,7 +51,13 @@ rule all:
             library=run_lib[1], run=run_lib[0], index=LIBRARIES[run_lib[1]], split=split))\
         for run_lib, split in itertools.product(RUN_LIBRARIES, SPLITS)],
         ["logs/{run}_{library}_abundant.log".format(run=run, library=library)\
-        for run, library in RUN_LIBRARIES]
+        for run, library in RUN_LIBRARIES],
+        [os.path.join(config['base_dir'], config['run_id'],
+                      '{library}_sort_reads.out'.format(library=library))\
+        for __, library in RUN_LIBRARIES],
+        [os.path.join(config['base_dir'], config['run_id'],
+                     '{library}_quantify_reads.out'.format(library=library))\
+        for __, library in RUN_LIBRARIES]
         
 
 rule extract_fastqs:
@@ -107,9 +121,42 @@ rule abundant_barcodes:
         yaml=ancient(config['yaml'])
     output:
         os.path.join(PROJECT_DIR, "{library}", "{library}.filtering_stats.csv")
-    log:
-        "logs/{run}_{library}_abundant.log"
     shell:
         """
-        (python indrops.py {input.yaml} identify_abundant_barcodes --libraries {wildcards.library}) > {log};
+        python indrops.py {input.yaml} identify_abundant_barcodes --libraries {wildcards.library}
+        """
+
+rule sort_reads:
+    input:
+        os.path.join(PROJECT_DIR, "{library}", "{library}.filtering_stats.csv"),
+        yaml=ancient(config['yaml'])
+    output:
+        os.path.join(config['base_dir'], config['run_id'], '{library}_sort_reads.out')
+    log:
+        "logs/{library}_sort.log"
+    shell:
+        """
+        if (python indrops.py {input.yaml} sort --libraries {wildcards.library}) > {log}; then
+            echo "Reads sorted!" > {output}
+        else
+            echo "Fail!"
+        fi
+        """
+
+rule quantify_barcodes:
+    input:
+        os.path.join(config['base_dir'], config['run_id'], '{library}_sort_reads.out'),
+        yaml=ancient(config['yaml'])
+    output:
+        os.path.join(config['base_dir'], config['run_id'],
+                     '{library}_quantify_reads.out')
+    log:
+        "logs/{library}_quantify.log"
+    shell:
+        """
+        if python indrops.py {input.yaml} quantify --libraries {wildcards.library}; then
+            echo "Reads quantified!" > {output}
+        else
+            echo "Fail!"
+        fi
         """
