@@ -197,7 +197,7 @@ class IndropsProject():
 
     def __init__(self, project_yaml_file_handle, read_only=False):
 
-        self.yaml = yaml.load(project_yaml_file_handle)
+        self.yaml = yaml.load(project_yaml_file_handle, yaml.FullLoader)
 
         self.name = self.yaml['project_name']
         self.project_dir = self.yaml['project_dir']
@@ -297,7 +297,7 @@ class IndropsProject():
             script_dir = os.path.dirname(os.path.realpath(__file__))
             #Read defaults
             with open(os.path.join(script_dir, 'default_parameters.yaml'), 'r') as f:
-                paths = yaml.load(f)['paths']
+                paths = yaml.load(f, yaml.FullLoader)['paths']
             # Update with user provided values
             paths.update(self.yaml['paths'])
 
@@ -322,7 +322,7 @@ class IndropsProject():
         if not hasattr(self, '_parameters'):
             #Read defaults
             with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'default_parameters.yaml'), 'r') as f:
-                self._parameters = yaml.load(f)['parameters']
+                self._parameters = yaml.load(f, yaml.FullLoader)['parameters']
             # Update with user provided values
             if 'parameters' in self.yaml:
                 for k, d in self.yaml['parameters'].items():
@@ -601,7 +601,7 @@ class IndropsLibrary():
 
             for part in self.parts:
                 with open(part.filtering_metrics_filename) as f:
-                    part_stats = yaml.load(f)
+                    part_stats = yaml.load(f, yaml.FullLoader)
                     line = [part.run_name, part.part_name, part_stats['read_structure']['Total'], part_stats['read_structure']['Valid'], part_stats['trimmomatic']['output'], part_stats['complexity_filter']['output']]
                     line += [part_stats['read_structure'][k] if k in part_stats['read_structure'] else 0 for k in structure_parts]
                     line += [part_stats['trimmomatic'][k] if k in part_stats['trimmomatic'] else 0 for k in trimmomatic_parts]
@@ -921,17 +921,17 @@ class IndropsLibrary():
         
 
         # Spawn processes
-        print_to_stderr("Processes spawned...")
-        print_to_stderr("Bowtie command:\n\n" + ' '.join(bowtie_cmd) + '\n')
+        # print_to_stderr("Processes spawned...")
+        # print_to_stderr("Bowtie command:\n\n" + ' '.join(bowtie_cmd) + '\n')
         p1 = subprocess.Popen(bowtie_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        print_to_stderr("Quant command: \n\n" + ' '.join(quant_cmd) + '\n')
+        # print_to_stderr("Quant command: \n\n" + ' '.join(quant_cmd) + '\n')
         p2 = subprocess.Popen(quant_cmd, stdin=p1.stdout, stderr=subprocess.PIPE)
         
-        n_line = 0
+        # n_line = 0
         for line in self.get_reads_for_barcode(barcode, run_filter=run_filter):
-            n_line += 1
+            # n_line += 1
             try:
-                print(n_line)
+                # print(n_line)
                 p1.stdin.write(line)
             except IOError as e:
                 print_to_stderr('\n')
