@@ -1713,7 +1713,7 @@ if __name__=="__main__":
     else:
         target_libraries = project.libraries.keys()
     lib_query = set(target_libraries)
-    print_to_stderr("Target libaries: {}".format(lib_query))
+    # print_to_stderr("Target libaries: {}".format(lib_query))
 
     target_runs = []
     if args.runs:
@@ -1722,7 +1722,7 @@ if __name__=="__main__":
             target_runs.append(run)
     else:
         target_runs = project.runs.keys()
-    print_to_stderr("Target runs: {}".format(target_runs))
+    # print_to_stderr("Target runs: {}".format(target_runs))
 
     target_library_parts = []
     for lib in target_libraries:
