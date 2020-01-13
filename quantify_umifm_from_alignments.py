@@ -25,7 +25,10 @@ def quant(args):
     using_mixed_ref = args.mixed_ref
 
     #Assume that references are named 'transcript_name|gene_name'
-    tx_to_gid = lambda tx: tx.split('|')[1] 
+    tx_to_gid = lambda tx: tx.split('|')[1] # might be the issue
+
+    # for urchin gff3
+    tx_to_gid = lambda tx: tx.replace('model', 'TU')
 
     umis_for_geneset = defaultdict(set)
     sam_input = pysam.AlignmentFile("-", "r" )
@@ -83,7 +86,7 @@ def quant(args):
         # as opposed to the arbitrary 'a.reference_id' number
         tx_ids = [sam_input.getrname(a.reference_id) for a in alignments]
 
-        #Map to Gene IDs
+        #Map to Gene IDs -- for urchins its "model" -> "TU"
         g_ids = [tx_to_gid(tx_id) for tx_id in tx_ids]
         # finally remove all copies to get a comprehensive unique list of genes
         # found for this barcode
@@ -343,7 +346,8 @@ def quant(args):
     #Output the counts per gene
     all_genes = set()
     for ref in sam_input.references:
-        gene = ref.split('|')[1]
+        # gene = ref.split('|')[1]
+        gene = ref.replace('model', 'TU')
         all_genes.add(gene)
 
 
