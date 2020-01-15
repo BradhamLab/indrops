@@ -4,7 +4,7 @@ import yaml
 import itertools
 
 configfile: "/projectnb/bradham/indrops/2019-10-24/2019-10-24-config.yaml"
-shell.prefix("source activate indrops; ")
+shell.prefix("source activate indrops; PYTHONWARNINGS=ignore::yaml.YAMLLoadWarning; ")
 
 with open(config['yaml'], 'r') as f:
     project_config = yaml.load(f, yaml.FullLoader)
@@ -24,7 +24,7 @@ for each in project_config['sequencing_runs']:
     for lib in each['libraries']:
         RUN_LIBRARIES.append((run, lib['library_name']))
         LIBRARIES[lib['library_name']] = lib['library_index']
-
+WORKERS = range(config['cores'])
 SPLITS = ['L001', 'L002', 'L003', 'L004']
 READS = ['R1', 'R2', 'R3', 'R4']
 # expected output from calling bcl2fastq
@@ -44,21 +44,39 @@ def sorted_output(library):
             return([out.format(library=lib, run=run, index=LIBRARIES[lib],
                                split=split) for split in SPLITS])
 
+def aggregate_input(wildcards):
+    library_quant = [os.path.join(PROJECT_DIR, wildcards.library, "quant_dir",
+                     "worker{i}_".format(i=i) + str(config['cores']) + ".counts.tsv") \
+                    for i in WORKERS]
+    return library_quant
+
 rule all:
     input:
-        [os.path.join(PROJECT_DIR, '{library}'.format(library=run_lib[1]),
-        'filtered_parts', "{library}_{run}_{index}_{split}.fastq".format(
-            library=run_lib[1], run=run_lib[0], index=LIBRARIES[run_lib[1]], split=split))\
-        for run_lib, split in itertools.product(RUN_LIBRARIES, SPLITS)],
-        ["logs/{run}_{library}_abundant.log".format(run=run, library=library)\
-        for run, library in RUN_LIBRARIES],
+        # [os.path.join(PROJECT_DIR, '{library}'.format(library=run_lib[1]),
+        # 'filtered_parts', "{library}_{run}_{index}_{split}.fastq".format(
+        #     library=run_lib[1], run=run_lib[0], index=LIBRARIES[run_lib[1]], split=split))\
+        # for run_lib, split in itertools.product(RUN_LIBRARIES, SPLITS)],
+        # ["logs/{run}_{library}_abundant.log".format(run=run, library=library)\
+        # for run, library in RUN_LIBRARIES],
+        # [os.path.join(config['base_dir'], config['run_id'],
+        #               '{library}_sort_reads.out'.format(library=library))\
+        # for __, library in RUN_LIBRARIES],
+        # [os.path.join(config['base_dir'], config['run_id'],
+        #              '{library}_quantify_reads.out'.format(library=library))\
+        # for __, library in RUN_LIBRARIES]
+        [os.path.join(PROJECT_DIR, "{library}/{library}.filtering_stats.csv".\
+                      format(library=library)) for library in LIBRARIES.keys()],
         [os.path.join(config['base_dir'], config['run_id'],
-                      '{library}_sort_reads.out'.format(library=library))\
-        for __, library in RUN_LIBRARIES],
-        [os.path.join(config['base_dir'], config['run_id'],
-                     '{library}_quantify_reads.out'.format(library=library))\
-        for __, library in RUN_LIBRARIES]
-        
+                     '{library}_{worker}_quantify_reads.out'.format(library=library,
+                                                                    worker=worker))\
+         for library, worker in itertools.product(LIBRARIES.keys(), WORKERS)],
+        # [os.path.join(PROJECT_DIR, "{library}/quant_dir/worker{worker}_".format(
+        #               library=run_lib[1], worker=worker)\
+        #               + str(config['cores']) + ".counts.tsv")\
+        #  for run_lib, worker in itertools.product(RUN_LIBRARIES, WORKERS)] 
+        [os.path.join(PROJECT_DIR, "{library}/{library}.counts.tsv.gz".\
+                       format(library=library))\
+            for library in LIBRARIES.keys()]      
 
 rule extract_fastqs:
     output:
@@ -102,22 +120,31 @@ rule filter_reads:
         symlinks=SYMLINKS,
         yaml=ancient(config['yaml'])
     output:
-        [os.path.join(PROJECT_DIR, '{library}',
-        'filtered_parts', "{library}_{run}_{index}_" + "{split}.fastq".format(
-            split=split)) for split in SPLITS]
+        os.path.join(config['base_dir'], config['run_id'],
+                     "{library}_{run}_{worker}_filter.out")
+    #     [os.path.join(PROJECT_DIR, '{library}',
+    #     'filtered_parts', "{library}_{run}_{index}_" + "{split}.fastq".format(
+    #         split=split)) for split in SPLITS]
+    params:
+        workers=config['cores']
     log:
-        "logs/{run}_{library}_{index}_filter.log"
+        "logs/{run}_{library}_{worker}_filter.log"
     shell:
         """
-        (python indrops.py {input.yaml} filter --runs {wildcards.run} --libraries {wildcards.library}) > {log}
+        if (python indrops.py {input.yaml} filter --runs {wildcards.run} --libraries {wildcards.library} --total-workers {params.workers} --worker-index {wildcards.worker}) > {log}; then
+            echo "Filtered successful!" > {output}
+        else
+            echo "Filtered Failed!"
+        fi
         """
 
 rule abundant_barcodes:
     input:
-        [os.path.join(PROJECT_DIR, '{library}'.format(library=run_lib[1]),
-        'filtered_parts', "{library}_{run}_{index}_{split}.fastq".format(
-            library=run_lib[1], run=run_lib[0], index=LIBRARIES[run_lib[1]], split=split))\
-        for run_lib, split in itertools.product(RUN_LIBRARIES, SPLITS)],
+        [os.path.join(config['base_dir'], config['run_id'],
+                     "{library}_{run}_{worker}_filter.out".format(library=run_lib[1],
+                                                           run=run_lib[0],
+                                                           worker=worker))\
+        for run_lib, worker in itertools.product(RUN_LIBRARIES, WORKERS)],
         yaml=ancient(config['yaml'])
     output:
         os.path.join(PROJECT_DIR, "{library}", "{library}.filtering_stats.csv")
@@ -146,17 +173,35 @@ rule sort_reads:
 rule quantify_barcodes:
     input:
         os.path.join(config['base_dir'], config['run_id'], '{library}_sort_reads.out'),
-        yaml=ancient(config['yaml'])
+        yaml=ancient(config['yaml']),
+        # This only necessary to allow worker
+        # filtered=os.path.join(config['base_dir'], config['run_id'],
+        #                       "{library}_{run}_{worker}_filter.out")
     output:
-        os.path.join(config['base_dir'], config['run_id'],
-                     '{library}_quantify_reads.out')
+        os.path.join(PROJECT_DIR, "{library}", "quant_dir", "worker{worker}_"\
+                     + str(config['cores']) + ".counts.tsv")
+    params:
+        workers=config['cores']
     log:
-        "logs/{library}_quantify.log"
+        "logs/{library}_{worker}_quantify.log"
     shell:
         """
-        if python indrops.py {input.yaml} quantify --libraries {wildcards.library}; then
-            echo "Reads quantified!" > {output}
-        else
-            echo "Fail!"
-        fi
+        (python indrops.py {input.yaml} quantify --libraries {wildcards.library} --total-workers {params.workers} --worker-index {wildcards.worker}) > {log}
         """
+
+rule aggregate_umis:
+    input:
+        lambda wildcards: aggregate_input(wildcards),
+        # [os.path.join(PROJECT_DIR, "{library}/quant_dir/" "worker{i}_".format(i=i) \
+        #                             + str(config['cores']) + ".counts.tsv") \
+        #             for i in WORKERS]
+        yaml=ancient(config['yaml'])
+    params:
+        workers=config['cores']
+    output:
+        os.path.join(PROJECT_DIR, "{library}/{library}.counts.tsv.gz")
+    shell:
+        """
+        python indrops.py {input.yaml} aggregate --total-workers {params.workers} --libraries {wildcards.library}
+        """
+
