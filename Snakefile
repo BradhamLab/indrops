@@ -52,29 +52,17 @@ def aggregate_input(wildcards):
 
 rule all:
     input:
-        # [os.path.join(PROJECT_DIR, '{library}'.format(library=run_lib[1]),
-        # 'filtered_parts', "{library}_{run}_{index}_{split}.fastq".format(
-        #     library=run_lib[1], run=run_lib[0], index=LIBRARIES[run_lib[1]], split=split))\
-        # for run_lib, split in itertools.product(RUN_LIBRARIES, SPLITS)],
-        # ["logs/{run}_{library}_abundant.log".format(run=run, library=library)\
-        # for run, library in RUN_LIBRARIES],
-        # [os.path.join(config['base_dir'], config['run_id'],
-        #               '{library}_sort_reads.out'.format(library=library))\
-        # for __, library in RUN_LIBRARIES],
-        # [os.path.join(config['base_dir'], config['run_id'],
-        #              '{library}_quantify_reads.out'.format(library=library))\
-        # for __, library in RUN_LIBRARIES]
+        '{}.transcripts.fa'.format(config['bowtie_index']),
         [os.path.join(PROJECT_DIR, "{library}/{library}.filtering_stats.csv".\
                       format(library=library)) for library in LIBRARIES.keys()],
         [os.path.join(config['base_dir'], config['run_id'],
                      '{library}_{worker}_quantify_reads.out'.format(library=library,
                                                                     worker=worker))\
          for library, worker in itertools.product(LIBRARIES.keys(), WORKERS)],
-        # [os.path.join(PROJECT_DIR, "{library}/quant_dir/worker{worker}_".format(
-        #               library=run_lib[1], worker=worker)\
-        #               + str(config['cores']) + ".counts.tsv")\
-        #  for run_lib, worker in itertools.product(RUN_LIBRARIES, WORKERS)] 
-        [os.path.join(PROJECT_DIR, "{library}/{library}.counts.tsv.gz".\
+        [os.path.join(config['base_dir'], config['run_id'],
+                     '{library}_extract_barcodes.out'.format(library=library))\
+         for library in LIBRARIES.keys()],
+        [os.path.join(PROJECT_DIR, "{library}/{library}.meta.csv".\
                        format(library=library))\
             for library in LIBRARIES.keys()]      
 
@@ -85,10 +73,9 @@ rule extract_fastqs:
         base_dir=config['base_dir']
     shell:
         """
-        cd {params.base_dir}; 
-        module load bcl2fastq;
-        bcl2fastq --use-bases-mask y*,y*,y*,y* --mask-short-adapter-reads 0
-        --minimum-trimmed-read-length 0
+        cd {params.base_dir} 
+        module load bcl2fastq
+        bcl2fastq --use-bases-mask y*,y*,y*,y* --mask-short-adapter-reads 0 --minimum-trimmed-read-length 0
         """
 
 rule symlink_fastq_files:
@@ -158,17 +145,72 @@ rule sort_reads:
         os.path.join(PROJECT_DIR, "{library}", "{library}.filtering_stats.csv"),
         yaml=ancient(config['yaml'])
     output:
-        os.path.join(config['base_dir'], config['run_id'], '{library}_sort_reads.out')
+        os.path.join(config['base_dir'], config['run_id'],
+                     '{library}_sort_reads.out')
     log:
         "logs/{library}_sort.log"
     shell:
         """
-        if (python indrops.py {input.yaml} sort --libraries {wildcards.library}) > {log}; then
+        if (python indrops.py {input.yaml} sort --libraries {wildcards.library}) 2> {log}; then
             echo "Reads sorted!" > {output}
         else
             echo "Fail!"
         fi
         """
+
+rule extract_barcodes:
+    input:
+        reads=os.path.join(config['base_dir'], config['run_id'],
+                           '{library}_sort_reads.out'),
+        yaml=ancient(config['yaml'])
+    output:
+        # flag=os.path.join(config['base_dir'], config['run_id'],
+        #                   '{library}_extract_barcodes.out'),
+        os.path.join(PROJECT_DIR, "{library}", "barcode_fastq",
+                     "{library}.{barcode}.fastq")
+    # log:
+    #     os.path.join(config['base_dir'], "logs",
+    #                  "{libary}_extract_barcodes.log")
+    shell:
+        """
+        python indrops.py {input.yaml} output_barcode_fastq --libraries {wildcards.library};       fi
+        """
+
+rule star_align_barcodes:
+    input:
+        fastq=os.path.join(PROJECT_DIR, "{library}", "barcode_fastq",
+                           "{library}.{barcode}.fastq"),
+        fasta=config['genome_fa'],
+        gtf=config['genome_gtf'],
+    params:
+        prefix=os.path.join(PROJECT_DIR, "{library}", "barcode_fastq",
+                            "{library}", "bams", "{barcode}",
+                            "{library}.{barcode}")
+    output:
+        os.path.join(PROJECT_DIR, "{library}", "barcode_fastq",
+                     "{library}", "bams", "{barcode}",
+                     "{library}.{barcode}Aligned.bam")
+    params:
+        index="/projectnb/bradham/data/ReferenceSequences/GenomeAnnotations/indrops_star",
+    shell:
+        "STAR --runMode alignReads --outSAMtype BAM Unsorted --readFilesCommand "
+        "cat --genomeDir {params.index} --readFilesIn {fastq} "
+        "--outFileNamePrefix {output}"
+
+
+# def aggregate_barcodes(wildcards):
+#     '''
+#     aggregate the file names of the random number of files
+#     generated at the scatter step
+#     '''
+#     checkpoint_output = checkpoints.extract_barcodes.get(**wildcards).output[0]
+#     return expand('scatter_copy_head/{i}_head.txt',
+#            i=glob_wildcards(os.path.join(checkpoint_output, '{i}.txt')).i)
+
+# rule aggreate_alignments:
+#     input:
+
+
 
 rule quantify_barcodes:
     input:
@@ -182,11 +224,9 @@ rule quantify_barcodes:
                      + str(config['cores']) + ".counts.tsv")
     params:
         workers=config['cores']
-    log:
-        "logs/{library}_{worker}_quantify.log"
     shell:
         """
-        (python indrops.py {input.yaml} quantify --libraries {wildcards.library} --total-workers {params.workers} --worker-index {wildcards.worker}) > {log}
+        python indrops.py {input.yaml} quantify --libraries {wildcards.library} --total-workers {params.workers} --worker-index {wildcards.worker}
         """
 
 rule aggregate_umis:
@@ -204,4 +244,24 @@ rule aggregate_umis:
         """
         python indrops.py {input.yaml} aggregate --total-workers {params.workers} --libraries {wildcards.library}
         """
+
+rule unzip_counts:
+    input:
+        os.path.join(PROJECT_DIR, "{library}/{library}.counts.tsv.gz")
+    output:
+        os.path.join(PROJECT_DIR, "{library}/{library}.counts.tsv")
+    shell:
+        "gunzip {input}"
+
+rule annotate_cells:
+    input:
+        counts=os.path.join(PROJECT_DIR, "{library}/{library}.counts.tsv"),
+        json = os.path.join(config['run_id'], 'library_meta.json')
+    output:
+        csv=os.path.join(PROJECT_DIR, "{library}/{library}.meta.csv")
+    script:
+        "scripts/annotate_libraries.py"
+
+
+    
 

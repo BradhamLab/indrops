@@ -711,7 +711,7 @@ class IndropsLibrary():
         merged_bam_index_filename = merged_bam_filename + '.bai'
 
         get_barcode_genomic_bam_filename = lambda bc: os.path.join(self.paths.quant_dir, '%s%s.genomic.sorted.bam' % (analysis_prefix, bc))
-
+        print_to_stderr(merged_bam_filename)
         # If we wanted BAM output, and the merge BAM and merged BAM index are present, then we are done
         if (not no_bam) and (os.path.isfile(merged_bam_filename) and os.path.isfile(merged_bam_index_filename)):
             print_to_stderr('Indexed, merged BAM file detected for this worker. Done.')
@@ -869,8 +869,11 @@ class IndropsLibrary():
 
         print(genomic_bams)
         for filename in genomic_bams:
-            os.remove(filename)
-            os.remove(filename + '.bai')
+            if os.path.exists(filename):
+                os.remove(filename)
+                os.remove(filename + '.bai')
+            else:
+                print_to_stderr("Missing genomic BAM %s." % filename)
 
     def quantify_expression_for_barcode(self, barcode, counts_output_filename, metrics_output_filename,
             ambig_counts_output_filename, ambig_partners_output_filename,
@@ -927,6 +930,7 @@ class IndropsLibrary():
         # print_to_stderr("Quant command: \n\n" + ' '.join(quant_cmd) + '\n')
         p2 = subprocess.Popen(quant_cmd, stdin=p1.stdout, stderr=subprocess.PIPE)
         
+        #TODO hack in STAR bam, probably hack in bam to pass to quant command
         # n_line = 0
         for line in self.get_reads_for_barcode(barcode, run_filter=run_filter):
             # n_line += 1
@@ -1778,6 +1782,7 @@ if __name__=="__main__":
             for bc in sorted_barcode_names:
                 for line in project.libraries[library].get_reads_for_barcode(bc, run_filter=target_runs):
                     sys.stdout.write(line)
+                
 
             for part in project.libraries[library].parts:
                 if hasattr(part, '_sorted_index'):
