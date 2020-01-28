@@ -905,7 +905,7 @@ class IndropsLibrary():
                                                   '%s.%s.fastq' % (self.name,
                                                                    barcode))
         output_prefix = os.path.join(self.path.quant_dir, "STAR", barcode)
-        if not os.path.exist(output_prefix):
+        if not os.path.exists(output_prefix):
             os.makedirs(output_prefix)
         # STAR command
         star_cmd = ['STAR',

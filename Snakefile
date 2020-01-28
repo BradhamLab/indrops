@@ -2,6 +2,8 @@ import os
 from glob import glob
 import yaml
 import itertools
+import subprocess as sbp
+import numpy as np
 
 configfile: "/projectnb/bradham/indrops/2019-10-24/2019-10-24-config.yaml"
 shell.prefix("source activate indrops; PYTHONWARNINGS=ignore::yaml.YAMLLoadWarning; ")
@@ -14,6 +16,41 @@ def symlink_output(input_dir, output_dir):
     output_files = [os.path.join(output_dir, os.path.split(x)[-1])\
                     for x in files]
     return output_files
+
+# function to get genomeChrBinNBits parameter for STAR alignment.
+def estimate_STAR_ChrBinNbits(genome_file, read_length):
+    """
+    Estimate the `ChrBinNBits` parameter for genome indexing in STAR
+    Estimate the `ChrBinNBits` parameter for genome indexing in STAR. Value
+    must be estimated due to memory constraints caused by the large number
+    of scaffolds present in some genomes (i.e. the LV genome). If estimation
+    is unnecessary, flag `star_est_ChrBinNbits: False` in configuration file.
+    Args:
+        genome_file (string): path to fasta file containing genome reference
+            sequences.
+        read_length (int): length of reads from RNAseq experiment.
+    Return:
+        (int) new value for scaling RAM consumption
+    References:
+    https://github.com/alexdobin/STAR/blob/master/doc/STARmanual.pdf (p. 7)
+    https://github.com/alexdobin/STAR/issues/103
+    """
+    len_call = 'grep -v ">" {} | wc | awk '.format(genome_file)\
+               + "'{print $3-$1}'"
+    n_ref_call = 'grep "^>" {} | wc -l'.format(genome_file)
+
+    return_values = [None, None]
+    for i, call in enumerate([len_call, n_ref_call]):
+        p = sbp.Popen(call, stdin=sbp.PIPE, stdout=sbp.PIPE, stderr=sbp.PIPE,
+                      shell=True)
+        output, err = p.communicate()
+        if p.returncode == 0:
+            return_values[i] = int(output.strip())
+        else:
+            raise OSError(err)
+    estimate = max([int(np.log2(return_values[0] / return_values[1])),
+                    int(np.log2(read_length))])
+    return min(18, estimate)
 
 PROJECT_DIR = project_config['project_dir']
 BASECALLS = os.path.join(config['base_dir'], 'Data', 'Intensities', 'BaseCalls')
@@ -52,7 +89,8 @@ def aggregate_input(wildcards):
 
 rule all:
     input:
-        '{}.transcripts.fa'.format(config['bowtie_index']),
+        # '{}.transcripts.fa'.format(config['bowtie_index']),
+        os.path.join(config['star_index'], 'Genome'),
         [os.path.join(PROJECT_DIR, "{library}/{library}.filtering_stats.csv".\
                       format(library=library)) for library in LIBRARIES.keys()],
         [os.path.join(config['base_dir'], config['run_id'],
@@ -87,31 +125,36 @@ rule symlink_fastq_files:
         link_dir=os.path.join(config['base_dir'], 'fastq')
     shell:
         "ln -s {input} {params.link_dir}"
+
+if not os.path.exists(config['star_index']):
+    os.makedirs(config['star_index'])
     
-rule build_bowtie_index:
+
+rule build_star_index:
     input:
         fasta=config['genome_fa'],
-        gtf=config['genome_gtf'],
+        gff3=config['genome_gtf'],
         yaml=ancient(config['yaml'])
     params:
-        indrops=os.path.join(config['indrops_dir'], 'indrops.py')
+        index_dir=config['star_index'],
+        chr_n_bits=estimate_STAR_ChrBinNbits(config['genome_fa'], 56),
     output:
-        out='{}.transcripts.fa'.format(config['bowtie_index'])
+        os.path.join(config['star_index'], 'Genome')
     shell:
-        "python {params.indrops} {input.yaml} build_index "
-        "--genome-fasta-gz {input.fasta} --ensembl-gtf-gz {input.gtf}"
+        "STAR --runMode genomeGenerate --genomeDir {params.index_dir} "
+        "--genomeFastaFiles {input.fasta} --sjdbGTFfile {input.gff3} "
+        "--sjdbOverhang 56 --genomeChrBinNbits {params.chr_n_bits} "
+        "--sjdbGTFtagExonParentTranscript Parent"
+
 
 rule filter_reads:
     input:
-        index='{}.transcripts.fa'.format(config['bowtie_index']),
+        index=os.path.join(config['star_index'], 'Genome'),
         symlinks=SYMLINKS,
         yaml=ancient(config['yaml'])
     output:
         os.path.join(config['base_dir'], config['run_id'],
                      "{library}_{run}_{worker}_filter.out")
-    #     [os.path.join(PROJECT_DIR, '{library}',
-    #     'filtered_parts', "{library}_{run}_{index}_" + "{split}.fastq".format(
-    #         split=split)) for split in SPLITS]
     params:
         workers=config['cores']
     log:
@@ -164,53 +207,16 @@ rule extract_barcodes:
                            '{library}_sort_reads.out'),
         yaml=ancient(config['yaml'])
     output:
-        # flag=os.path.join(config['base_dir'], config['run_id'],
-        #                   '{library}_extract_barcodes.out'),
-        os.path.join(PROJECT_DIR, "{library}", "barcode_fastq",
-                     "{library}.{barcode}.fastq")
-    # log:
-    #     os.path.join(config['base_dir'], "logs",
-    #                  "{libary}_extract_barcodes.log")
+        flag=os.path.join(config['base_dir'], config['run_id'],
+                          '{library}_extract_barcodes.out')
     shell:
         """
-        python indrops.py {input.yaml} output_barcode_fastq --libraries {wildcards.library};       fi
+        if python indrops.py {input.yaml} output_barcode_fastq --libraries {wildcards.library}; then
+            echo "Barcode FASTQs extracted" > {output}
+        else
+            echo "Fail!"
+        fi
         """
-
-rule star_align_barcodes:
-    input:
-        fastq=os.path.join(PROJECT_DIR, "{library}", "barcode_fastq",
-                           "{library}.{barcode}.fastq"),
-        fasta=config['genome_fa'],
-        gtf=config['genome_gtf'],
-    params:
-        prefix=os.path.join(PROJECT_DIR, "{library}", "barcode_fastq",
-                            "{library}", "bams", "{barcode}",
-                            "{library}.{barcode}")
-    output:
-        os.path.join(PROJECT_DIR, "{library}", "barcode_fastq",
-                     "{library}", "bams", "{barcode}",
-                     "{library}.{barcode}Aligned.bam")
-    params:
-        index="/projectnb/bradham/data/ReferenceSequences/GenomeAnnotations/indrops_star",
-    shell:
-        "STAR --runMode alignReads --outSAMtype BAM Unsorted --readFilesCommand "
-        "cat --genomeDir {params.index} --readFilesIn {fastq} "
-        "--outFileNamePrefix {output}"
-
-
-# def aggregate_barcodes(wildcards):
-#     '''
-#     aggregate the file names of the random number of files
-#     generated at the scatter step
-#     '''
-#     checkpoint_output = checkpoints.extract_barcodes.get(**wildcards).output[0]
-#     return expand('scatter_copy_head/{i}_head.txt',
-#            i=glob_wildcards(os.path.join(checkpoint_output, '{i}.txt')).i)
-
-# rule aggreate_alignments:
-#     input:
-
-
 
 rule quantify_barcodes:
     input:
