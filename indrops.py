@@ -475,6 +475,7 @@ class IndropsProject():
                             "RSEM, no filtering step as with ENSEMBL gtf.")
             gtf_with_genenames_in_transcript_id = gzipped_transcriptome_gtf
             anno_type = 'gff3'
+            genes_as_transcripts = '--gff3-genes-as-transcripts'
         else:
             gtf_filename = os.path.join(index_dir, gzipped_transcriptome_gtf.split('/')[-1])
             gtf_prefix = '.'.join(gtf_filename.split('.')[:-2])
@@ -484,6 +485,7 @@ class IndropsProject():
             self.filter_gtf(gzipped_transcriptome_gtf,
                             gtf_with_genenames_in_transcript_id)
             anno_type = 'gtf'
+            genes_as_transcripts = ''
 
         print_to_stderr('Gunzipping Genome')
         p_gzip = subprocess.Popen(["gzip", "-dfc",
@@ -500,8 +502,9 @@ class IndropsProject():
         rsem_args = [self.paths.rsem_prepare_reference,
                      '--bowtie', bowtie_path_args,
                      '--' + anno_type,
-                     gtf_with_genenames_in_transcript_id, 
+                     gtf_with_genenames_in_transcript_id,
                      '--polyA', '--polyA-length', '5',
+                     genes_as_transcripts,
                      genome_filename, self.paths.bowtie_index]
         print_to_stderr("Running RSEM: " + " ".join(rsem_args))
         p_rsem = subprocess.Popen(rsem_args)
@@ -892,10 +895,30 @@ class IndropsLibrary():
             '-l', str(self.project.parameters['bowtie_arguments']['l']),
             '-e', str(self.project.parameters['bowtie_arguments']['e']),
             ]
+
+        unaligned = 'Fastx'
         if self.project.parameters['output_arguments']['output_unaligned_reads_to_other_fastq']:
             bowtie_cmd += ['--un', unaligned_reads_output]
-
-
+            unaligned = 'None'
+        barcode_path = os.path.join(os.path.split(self.paths.quant_dir)[0],
+                                                  'barcode_fastq',
+                                                  '%s.%s.fastq' % (self.name,
+                                                                   barcode))
+        output_prefix = os.path.join(self.path.quant_dir, "STAR", barcode)
+        if not os.path.exist(output_prefix):
+            os.makedirs(output_prefix)
+        # STAR command
+        star_cmd = ['STAR',
+                    '--runMode' 'alignReads',
+                    '--outSAMtype', 'SAM',
+                    '--readFilesCommand', 'cat',
+                    '--genomeDir', self.project.paths.bowtie_index,
+                    '--FileNamePrefix', output_prefix,
+                    '--readFilesIn', barcode_path,
+                    '--outReadsUnmapped', unaligned,
+                    '--outSAMtype', 'SAM',
+                    '--outStd', 'SAM']
+        
         # Quantification command
         script_dir = os.path.dirname(os.path.realpath(__file__))
         quant_cmd = [self.project.paths.python, self.project.paths.quantify_umifm_from_alignments_py,
@@ -926,24 +949,26 @@ class IndropsLibrary():
         # Spawn processes
         # print_to_stderr("Processes spawned...")
         # print_to_stderr("Bowtie command:\n\n" + ' '.join(bowtie_cmd) + '\n')
-        p1 = subprocess.Popen(bowtie_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        p1 = subprocess.Popen(star_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         # print_to_stderr("Quant command: \n\n" + ' '.join(quant_cmd) + '\n')
         p2 = subprocess.Popen(quant_cmd, stdin=p1.stdout, stderr=subprocess.PIPE)
         
         #TODO hack in STAR bam, probably hack in bam to pass to quant command
         # n_line = 0
-        for line in self.get_reads_for_barcode(barcode, run_filter=run_filter):
-            # n_line += 1
-            try:
-                # print(n_line)
-                p1.stdin.write(line)
-            except IOError as e:
-                print_to_stderr('\n')
-                print_to_stderr(p1.stderr.read())
-                raise Exception('\n === Error on piping data to bowtie ===')
+        # reading standard in necessary for bowtie, not STAR
+        if False:
+            for line in self.get_reads_for_barcode(barcode, run_filter=run_filter):
+                # n_line += 1
+                try:
+                    # print(n_line)
+                    p1.stdin.write(line)
+                except IOError as e:
+                    print_to_stderr('\n')
+                    print_to_stderr(p1.stderr.read())
+                    raise Exception('\n === Error on piping data to bowtie ===')
 
 
-        p1.stdin.close()
+            p1.stdin.close()
 
         if p1.wait() != 0:
             print_to_stderr('\n')
@@ -962,6 +987,7 @@ class IndropsLibrary():
         if not os.path.isfile(aligned_bam):
             raise Exception("\n === No aligned bam was output for barcode %s ===" % barcode)
 
+        # is transcriptomic bam, convert to genomic bam
         genomic_bam = os.path.join(self.paths.quant_dir, '%s%s.genomic.bam' % (analysis_prefix,barcode))
         sorted_bam = os.path.join(self.paths.quant_dir, '%s%s.genomic.sorted.bam' % (analysis_prefix,barcode))
         try:
