@@ -850,7 +850,11 @@ class IndropsLibrary():
                 bc = line.partition('\t')[0]
                 if bc == 'Barcode': #This is the line in the header
                     continue
-                genomic_bams.append(get_barcode_genomic_bam_filename(bc))
+                genomic_bam = get_barcode_genomic_bam_filename(bc)
+                if not os.path.exists(genomic_bam):
+                    genomic_bam = path.join(self.paths.quant_dir, "STAR", bc,
+                                            'Aligned.out.sam')
+                genomic_bams.append(genomic_bam)
 
         print_to_stderr("Merging BAM output.")
         try:
@@ -896,10 +900,10 @@ class IndropsLibrary():
             '-e', str(self.project.parameters['bowtie_arguments']['e']),
             ]
 
-        unaligned = 'Fastx'
+        unaligned = 'None'
         if self.project.parameters['output_arguments']['output_unaligned_reads_to_other_fastq']:
             bowtie_cmd += ['--un', unaligned_reads_output]
-            unaligned = 'None'
+            unaligned = 'Fastx'
         barcode_path = os.path.join(os.path.split(self.paths.quant_dir)[0],
                                                   'barcode_fastq',
                                                   '%s.%s.fastq' % (self.name,
