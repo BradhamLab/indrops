@@ -126,6 +126,19 @@ rule symlink_fastq_files:
     shell:
         "ln -s {input} {params.link_dir}"
 
+rule fastqc_biological_reads:
+    input:
+        [x in SYMLINKS if 'R1' in x]
+    params:
+        outdir=os.path.join(config['base_dir'], config['run_id'], 'fastqc')
+    output:
+        [os.path.join(config['base_dir'], config['run_id'],
+                      'fastqc', x.replace('.fastq.gz', '_fastqc.html'))\
+         for x in SYMLINKS if 'R1' in x]
+    shell:
+        "fastqc {input} -o {params.outdir}"
+        
+
 if not os.path.exists(config['star_index']):
     os.makedirs(config['star_index'])
     
