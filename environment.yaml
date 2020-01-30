@@ -9,6 +9,7 @@ dependencies:
   - bioconductor-biocgenerics=0.28.0=r351_1
   - bioconductor-ebseq=1.24.0=r351_0
   - bowtie=1.1.1=py27h2d50403_0
+  - fastqc=0.11.9=0
   - htslib=1.9=h4da6232_3
   - perl-app-cpanminus=1.7044=pl526_1
   - perl-carp=1.38=pl526_3
@@ -43,9 +44,12 @@ dependencies:
   - perl-version=0.9924=pl526_0
   - pyfasta=0.5.2=py27_0
   - pysam=0.15.3=py27hbcae180_3
-  - rsem=1.2.28=0
+  - rsem=1.3.2=pl526ha52163a_1
   - samtools=1.3.1=5
+  - star=2.7.3a=0
+  - ucsc-bigwigsummary=377=h199ee4e_0
   - _r-mutex=1.0.1=anacondar_1
+  - alsa-lib=1.1.5=h516909a_1002
   - backports=1.0=py_2
   - backports.functools_lru_cache=1.6.1=py_0
   - backports_abc=0.5=py_1
@@ -56,13 +60,13 @@ dependencies:
   - bwidget=1.9.13=0
   - bzip2=1.0.8=h516909a_1
   - ca-certificates=2019.11.28=hecc5488_0
-  - cairo=1.16.0=ha4e643d_1000
+  - cairo=1.14.12=h80bd089_1005
   - certifi=2019.11.28=py27_0
-  - curl=7.65.3=hf8cf82a_0
+  - curl=7.64.0=h646f8bb_0
   - cycler=0.10.0=py_2
-  - dbus=1.13.6=he372182_0
   - enum34=1.1.6=py27_1002
   - expat=2.2.5=he1b5a44_1004
+  - font-ttf-dejavu-sans-mono=2.37=hab24e00_0
   - fontconfig=2.13.1=he4413a7_1000
   - freetype=2.10.0=he983fc9_1
   - functools32=3.2.3.2=py_3
@@ -72,22 +76,22 @@ dependencies:
   - gettext=0.19.8.1=hc5be6a0_1002
   - gfortran_impl_linux-64=7.3.0=hdf63c60_2
   - gfortran_linux-64=7.3.0=h553295d_15
-  - glib=2.58.3=py27h6f030ca_1002
+  - giflib=5.2.1=h516909a_1
+  - glib=2.56.2=had28632_1001
   - graphite2=1.3.13=hf484d3e_1000
   - gsl=2.5=h294904e_1
-  - gst-plugins-base=1.14.5=h0935bb2_0
-  - gstreamer=1.14.5=h36ae1b5_0
   - gxx_impl_linux-64=7.3.0=hdf63c60_2
   - gxx_linux-64=7.3.0=h553295d_15
   - icu=58.2=hf484d3e_1000
   - jpeg=9c=h14c3975_1001
   - kiwisolver=1.1.0=py27hc9558a2_0
-  - krb5=1.16.3=h05b26f9_1001
+  - krb5=1.16.3=hc83ff2d_1000
+  - lcms2=2.9=hbd6801e_1
   - ld_impl_linux-64=2.33.1=h53a641e_7
   - libblas=3.8.0=14_openblas
   - libcblas=3.8.0=14_openblas
   - libclang=9.0.0=default_hde54327_4
-  - libcurl=7.65.3=hda55be3_0
+  - libcurl=7.64.0=h01ee5af_0
   - libdeflate=1.3=h516909a_0
   - libffi=3.2.1=he1b5a44_1006
   - libgcc=7.2.0=h69d50b8_2
@@ -98,7 +102,7 @@ dependencies:
   - libllvm9=9.0.0=hc9558a2_3
   - libopenblas=0.3.7=h6e990d7_3
   - libpng=1.6.37=hed695b0_0
-  - libssh2=1.8.2=h22169c7_2
+  - libssh2=1.8.0=h1ad7b7a_1003
   - libtiff=4.1.0=hc3755c2_1
   - libuuid=2.32.1=h14c3975_1000
   - libxcb=1.13=h14c3975_1002
@@ -108,11 +112,13 @@ dependencies:
   - make=4.2.1=h14c3975_2004
   - matplotlib=2.2.3=py27h8a2030e_1
   - matplotlib-base=2.2.3=py27h60b886d_1
+  - mysql-connector-c=6.1.11=hab6429c_1002
   - ncurses=6.1=hf484d3e_1002
   - nspr=4.23=he1b5a44_0
   - nss=3.47=he751ad9_0
   - numpy=1.16.5=py27h95a1406_0
-  - openssl=1.1.1d=h516909a_0
+  - openjdk=11.0.1=h600c080_1018
+  - openssl=1.0.2u=h516909a_0
   - pango=1.40.14=he752989_2
   - pcre=8.43=he1b5a44_0
   - perl=5.26.2=h516909a_1006
@@ -121,14 +127,14 @@ dependencies:
   - pthread-stubs=0.4=h14c3975_1001
   - pyparsing=2.4.5=py_0
   - pyqt=5.6.0=py27h13b7fb3_1008
-  - python=2.7.15=h721da81_1008
+  - python=2.7.15=h938d71a_1006
   - python-dateutil=2.8.1=py_0
   - pytz=2019.3=py_0
   - pyyaml=5.1.2=py27h516909a_0
   - r=3.5.1=r35_1003
   - r-assertthat=0.2.1=r35h6115d3f_1
   - r-backports=1.1.5=r35hcdcec82_0
-  - r-base=3.5.1=hea2b9be_1007
+  - r-base=3.5.1=he45234b_1005
   - r-bibtex=0.4.2=r35hcdcec82_1003
   - r-bitops=1.0_6=r35hcdcec82_1003
   - r-blockmodeling=0.3.4=r35h9bbef5b_2
@@ -195,6 +201,8 @@ dependencies:
   - tktable=2.10=h555a92e_3
   - tornado=5.1.1=py27h14c3975_1000
   - wheel=0.33.6=py27_0
+  - xorg-fixesproto=5.0=h14c3975_1002
+  - xorg-inputproto=2.3.2=h14c3975_1002
   - xorg-kbproto=1.0.7=h14c3975_1002
   - xorg-libice=1.0.10=h516909a_0
   - xorg-libsm=1.2.3=h84519dc_1000
@@ -202,8 +210,12 @@ dependencies:
   - xorg-libxau=1.0.9=h14c3975_0
   - xorg-libxdmcp=1.1.3=h516909a_0
   - xorg-libxext=1.3.4=h516909a_0
+  - xorg-libxfixes=5.0.3=h516909a_1004
+  - xorg-libxi=1.7.10=h516909a_0
   - xorg-libxrender=0.9.10=h516909a_1002
   - xorg-libxt=1.2.0=h516909a_0
+  - xorg-libxtst=1.2.3=h516909a_1002
+  - xorg-recordproto=1.14.2=h516909a_1002
   - xorg-renderproto=0.11.1=h14c3975_1002
   - xorg-xextproto=7.3.0=h14c3975_1002
   - xorg-xproto=7.0.31=h14c3975_1007
@@ -212,6 +224,9 @@ dependencies:
   - zlib=1.2.11=h516909a_1006
   - zstd=1.4.4=h3b9ef0a_1
   - _libgcc_mutex=0.1=main
+  - dbus=1.13.2=h714fa37_1
+  - gst-plugins-base=1.14.0=hbbd80ab_1
+  - gstreamer=1.14.0=hb453b48_1
   - harfbuzz=1.8.8=hffaf4a1_0
   - libedit=3.1.20181209=hc058e9b_0
   - libgcc-ng=9.1.0=hdf63c60_0
