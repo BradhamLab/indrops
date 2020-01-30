@@ -31,7 +31,7 @@ def quant(args):
     tx_to_gid = lambda tx: tx.replace('model', 'TU')
 
     umis_for_geneset = defaultdict(set)
-    sam_input = pysam.AlignmentFile(args.bam, "r" )
+    sam_input = pysam.AlignmentFile('-', "r" )
 
     # Tuple containing lengths of reference sequences
     ref_lengths = copy(sam_input.lengths)
@@ -438,7 +438,7 @@ if __name__=="__main__":
     parser.add_argument('--split_ambi', help="If umi is assigned to m genes, add 1/m to each gene's count (instead of 1)", action='store_true', default=False)
     parser.add_argument('--mixed_ref', help="Reference is mixed, with records named 'gene:ref', should only keep reads that align to one ref.", action='store_true', default=False)
     parser.add_argument('--min_non_polyA', type=int, default=0)
-    parser.add_argument('--bam', help="Aligned reads. Optional if not passing through standard in", type=str, default="-")
+    parser.add_argument('--sam', help="Aligned reads. Optional if not passing through standard in", type=str, default="-")
 
     # parser.add_argument('--counts', type=argparse.FileType('w'))
     # parser.add_argument('--metrics', type=argparse.FileType('w'))
