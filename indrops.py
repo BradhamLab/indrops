@@ -904,21 +904,24 @@ class IndropsLibrary():
                                                   'barcode_fastq',
                                                   '%s.%s.fastq' % (self.name,
                                                                    barcode))
-        output_prefix = os.path.join(self.path.quant_dir, "STAR", barcode)
+        output_prefix = os.path.join(self.paths.quant_dir, "STAR",
+                                     barcode + '/')
+        star_sam = os.path.join(output_prefix, 'Aligned.out.sam')
         if not os.path.exists(output_prefix):
             os.makedirs(output_prefix)
         # STAR command
         star_cmd = ['STAR',
-                    '--runMode' 'alignReads',
+                    '--runMode', 'alignReads',
                     '--outSAMtype', 'SAM',
                     '--readFilesCommand', 'cat',
                     '--genomeDir', self.project.paths.bowtie_index,
-                    '--FileNamePrefix', output_prefix,
+                    '--outFileNamePrefix', output_prefix,
                     '--readFilesIn', barcode_path,
                     '--outReadsUnmapped', unaligned,
-                    '--outSAMtype', 'SAM',
+                    # '--outSAMtype', 'SAM',
                     '--outStd', 'SAM']
-        
+                    # ]
+ 
         # Quantification command
         script_dir = os.path.dirname(os.path.realpath(__file__))
         quant_cmd = [self.project.paths.python, self.project.paths.quantify_umifm_from_alignments_py,
@@ -933,6 +936,7 @@ class IndropsLibrary():
             '--ambigs', ambig_counts_output_filename,
             '--ambig-partners', ambig_partners_output_filename,
             '--min-counts', str(min_counts),
+            # '--sam', 'star_sam',
         ]
         if not no_bam:
             quant_cmd += ['--bam', aligned_bam]
@@ -948,15 +952,20 @@ class IndropsLibrary():
 
         # Spawn processes
         # print_to_stderr("Processes spawned...")
-        # print_to_stderr("Bowtie command:\n\n" + ' '.join(bowtie_cmd) + '\n')
-        p1 = subprocess.Popen(star_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        # print_to_stderr("Quant command: \n\n" + ' '.join(quant_cmd) + '\n')
-        p2 = subprocess.Popen(quant_cmd, stdin=p1.stdout, stderr=subprocess.PIPE)
+        # print_to_stderr("STAR command:\n\n" + ' '.join(star_cmd) + '\n')
+        p1 = subprocess.Popen(star_cmd,
+                              stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE)
+        print_to_stderr("Quant command: \n\n" + ' '.join(quant_cmd) + '\n')
+        p2 = subprocess.Popen(quant_cmd,
+                              stdin=p1.stdout,
+                              stderr=subprocess.PIPE)
         
         #TODO hack in STAR bam, probably hack in bam to pass to quant command
         # n_line = 0
         # reading standard in necessary for bowtie, not STAR
-        if False:
+        STAR = True
+        if not STAR:
             for line in self.get_reads_for_barcode(barcode, run_filter=run_filter):
                 # n_line += 1
                 try:
@@ -988,16 +997,22 @@ class IndropsLibrary():
             raise Exception("\n === No aligned bam was output for barcode %s ===" % barcode)
 
         # is transcriptomic bam, convert to genomic bam
-        genomic_bam = os.path.join(self.paths.quant_dir, '%s%s.genomic.bam' % (analysis_prefix,barcode))
-        sorted_bam = os.path.join(self.paths.quant_dir, '%s%s.genomic.sorted.bam' % (analysis_prefix,barcode))
-        try:
-            subprocess.check_output([self.project.paths.rsem_tbam2gbam, self.project.paths.bowtie_index, aligned_bam, genomic_bam], stderr=subprocess.STDOUT)
-        except subprocess.CalledProcessError, err:
-            print_to_stderr("   CMD: %s" % str(err.cmd)[:100])
-            print_to_stderr("   stdout/stderr:")
-            print_to_stderr(err.output)
-            raise Exception(" === Error in rsem-tbam2gbam === ")
-
+        genomic_bam = aligned_bam
+        sorted_bam = os.path.join(self.paths.quant_dir,
+                                  '%s%s' % (analysis_prefix, barcode))
+        if not STAR:
+            genomic_bam = os.path.join(self.paths.quant_dir,
+                                       '%s%s.genomic.bam' % (analysis_prefix,barcode))
+            sorted_bam = os.path.join(self.paths.quant_dir,
+                                      '%s%s.genomic.sorted.bam' % (analysis_prefix,barcode))
+            try:
+                subprocess.check_output([self.project.paths.rsem_tbam2gbam, self.project.paths.bowtie_index, aligned_bam, genomic_bam], stderr=subprocess.STDOUT)
+            except subprocess.CalledProcessError, err:
+                print_to_stderr("   CMD: %s" % str(err.cmd)[:100])
+                print_to_stderr("   stdout/stderr:")
+                print_to_stderr(err.output)
+                raise Exception(" === Error in rsem-tbam2gbam === ")
+        
         try:
             subprocess.check_output([self.project.paths.samtools, 'sort', '-o', sorted_bam, genomic_bam], stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError, err:
@@ -1013,9 +1028,11 @@ class IndropsLibrary():
             print_to_stderr("   stdout/stderr:")
             print_to_stderr(err.output)
             raise Exception(" === Error in samtools index === ")
-
-        os.remove(aligned_bam)
-        os.remove(genomic_bam)
+        
+        if os.path.exists(aligned_bam):
+            os.remove(aligned_bam)
+        if os.path.exists(genomic_bam):
+            os.remove(genomic_bam)
 
 
         return True
