@@ -102,7 +102,11 @@ rule all:
          for library in LIBRARIES.keys()],
         [os.path.join(PROJECT_DIR, "{library}/{library}.meta.csv".\
                        format(library=library))\
-            for library in LIBRARIES.keys()]      
+            for library in LIBRARIES.keys()],
+        # fastqc output
+        [os.path.join(config['base_dir'], config['run_id'],
+                      'fastqc', x.replace('.fastq.gz', '_fastqc.html'))\
+         for x in SYMLINKS if 'R1' in x] 
 
 rule extract_fastqs:
     output:
@@ -128,7 +132,7 @@ rule symlink_fastq_files:
 
 rule fastqc_biological_reads:
     input:
-        [x in SYMLINKS if 'R1' in x]
+        [x for x in SYMLINKS if 'R1' in x]
     params:
         outdir=os.path.join(config['base_dir'], config['run_id'], 'fastqc')
     output:
@@ -235,9 +239,6 @@ rule quantify_barcodes:
     input:
         os.path.join(config['base_dir'], config['run_id'], '{library}_sort_reads.out'),
         yaml=ancient(config['yaml']),
-        # This only necessary to allow worker
-        # filtered=os.path.join(config['base_dir'], config['run_id'],
-        #                       "{library}_{run}_{worker}_filter.out")
     output:
         os.path.join(PROJECT_DIR, "{library}", "quant_dir", "worker{worker}_"\
                      + str(config['cores']) + ".counts.tsv")
@@ -251,9 +252,6 @@ rule quantify_barcodes:
 rule aggregate_umis:
     input:
         lambda wildcards: aggregate_input(wildcards),
-        # [os.path.join(PROJECT_DIR, "{library}/quant_dir/" "worker{i}_".format(i=i) \
-        #                             + str(config['cores']) + ".counts.tsv") \
-        #             for i in WORKERS]
         yaml=ancient(config['yaml'])
     params:
         workers=config['cores']
