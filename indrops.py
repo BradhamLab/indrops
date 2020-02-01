@@ -852,8 +852,8 @@ class IndropsLibrary():
                     continue
                 genomic_bam = get_barcode_genomic_bam_filename(bc)
                 if not os.path.exists(genomic_bam):
-                    genomic_bam = path.join(self.paths.quant_dir, "STAR", bc,
-                                            'Aligned.out.sam')
+                    genomic_bam = os.path.join(self.paths.quant_dir, "STAR", bc,
+                                      '%s%s.sorted.bam' % (analysis_prefix, bc))
                 genomic_bams.append(genomic_bam)
 
         print_to_stderr("Merging BAM output.")
@@ -910,7 +910,7 @@ class IndropsLibrary():
                                                                    barcode))
         output_prefix = os.path.join(self.paths.quant_dir, "STAR",
                                      barcode + '/')
-        star_sam = os.path.join(output_prefix, 'Aligned.out.sam')
+        aligned_bam = os.path.join(output_prefix, 'Aligned.out.bam')
         if not os.path.exists(output_prefix):
             os.makedirs(output_prefix)
         # STAR command
@@ -922,9 +922,8 @@ class IndropsLibrary():
                     '--outFileNamePrefix', output_prefix,
                     '--readFilesIn', barcode_path,
                     '--outReadsUnmapped', unaligned,
-                    # '--outSAMtype', 'SAM',
-                    '--outStd', 'SAM']
-                    # ]
+                    '--outStd', 'SAM',
+        ]
  
         # Quantification command
         script_dir = os.path.dirname(os.path.realpath(__file__))
@@ -940,7 +939,7 @@ class IndropsLibrary():
             '--ambigs', ambig_counts_output_filename,
             '--ambig-partners', ambig_partners_output_filename,
             '--min-counts', str(min_counts),
-            # '--sam', 'star_sam',
+            # '--sam', 'star_sam'
         ]
         if not no_bam:
             quant_cmd += ['--bam', aligned_bam]
@@ -957,10 +956,11 @@ class IndropsLibrary():
         # Spawn processes
         # print_to_stderr("Processes spawned...")
         # print_to_stderr("STAR command:\n\n" + ' '.join(star_cmd) + '\n')
+        # align barcode fastq using star -- write to SAM
         p1 = subprocess.Popen(star_cmd,
                               stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE)
-        print_to_stderr("Quant command: \n\n" + ' '.join(quant_cmd) + '\n')
+        # quantify alignment using SAM passed from sam_to_stdout
         p2 = subprocess.Popen(quant_cmd,
                               stdin=p1.stdout,
                               stderr=subprocess.PIPE)
@@ -987,6 +987,11 @@ class IndropsLibrary():
             print_to_stderr('\n')
             print_to_stderr(p1.stderr.read())
             raise Exception('\n === Error on bowtie ===')
+        
+        # if sam_to_stdout.wait() != 0:
+        #     print_to_stderr('\n')
+        #     print_to_stderr(sam_to_stdout.stderr.read())
+        #     raise Exception('\n === Error in printing SAM file ===')
 
         if p2.wait() != 0:
             print_to_stderr(p2.stderr.read())
@@ -1002,9 +1007,11 @@ class IndropsLibrary():
 
         # is transcriptomic bam, convert to genomic bam
         genomic_bam = aligned_bam
-        sorted_bam = os.path.join(self.paths.quant_dir,
-                                  '%s%s' % (analysis_prefix, barcode))
+        sorted_bam = os.path.join(output_prefix,
+                                  '%s%s.sorted.bam' % (analysis_prefix, barcode))
         if not STAR:
+            output_prefix = os.path.join(self.paths.quant_dir, "STAR",
+                                     barcode + '/')
             genomic_bam = os.path.join(self.paths.quant_dir,
                                        '%s%s.genomic.bam' % (analysis_prefix,barcode))
             sorted_bam = os.path.join(self.paths.quant_dir,
