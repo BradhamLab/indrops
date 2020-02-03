@@ -246,7 +246,7 @@ rule quantify_barcodes:
         workers=config['cores']
     shell:
         """
-        python indrops.py {input.yaml} quantify --libraries {wildcards.library} --total-workers {params.workers} --worker-index {wildcards.worker}
+        python indrops.py {input.yaml} quantify --libraries {wildcards.library} --total-workers {params.workers} --worker-index {wildcards.worker} --no_bam
         """
 
 rule aggregate_umis:

@@ -839,7 +839,6 @@ class IndropsLibrary():
                                                  run_filter=run_filter)
             header_written = True
         print_to_stderr("Per barcode quantification completed.")
-
         if no_bam:
             return
 
@@ -939,6 +938,7 @@ class IndropsLibrary():
             '--ambigs', ambig_counts_output_filename,
             '--ambig-partners', ambig_partners_output_filename,
             '--min-counts', str(min_counts),
+            '--bam', aligned_bam
             # '--sam', 'star_sam'
         ]
         if not no_bam:
