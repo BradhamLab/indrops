@@ -923,6 +923,7 @@ class IndropsLibrary():
                     '--outReadsUnmapped', unaligned,
                     '--outStd', 'SAM',
         ]
+        STAR = True
  
         # Quantification command
         script_dir = os.path.dirname(os.path.realpath(__file__))
@@ -942,6 +943,9 @@ class IndropsLibrary():
             # '--sam', 'star_sam'
         ]
         if not no_bam:
+            quant_cmd += ['--bam', aligned_bam]
+        
+        if STAR:
             quant_cmd += ['--bam', aligned_bam]
         if write_header:
             quant_cmd += ['--write-header']
@@ -968,7 +972,6 @@ class IndropsLibrary():
         #TODO hack in STAR bam, probably hack in bam to pass to quant command
         # n_line = 0
         # reading standard in necessary for bowtie, not STAR
-        STAR = True
         if not STAR:
             for line in self.get_reads_for_barcode(barcode, run_filter=run_filter):
                 # n_line += 1
