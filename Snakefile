@@ -106,7 +106,10 @@ rule all:
         # fastqc output
         [os.path.join(config['base_dir'], config['run_id'],
                       'fastqc', x.replace('.fastq.gz', '_fastqc.html'))\
-         for x in SYMLINKS if 'R1' in x] 
+         for x in SYMLINKS if 'R1' in x],
+         [os.path.join(PROJECT_DIR, "{library}", "plots",
+                            "{library}.alignment_distribution.png").format(
+                             library=library) for library in LIBRARIES.keys()]
 
 rule extract_fastqs:
     output:
@@ -256,7 +259,8 @@ rule aggregate_umis:
     params:
         workers=config['cores']
     output:
-        os.path.join(PROJECT_DIR, "{library}/{library}.counts.tsv.gz")
+        os.path.join(PROJECT_DIR, "{library}/{library}.counts.tsv.gz"),
+        os.path.join(PROJECT_DIR, "{library}/{library}.quant_metrics.tsv.gz")
     shell:
         """
         python indrops.py {input.yaml} aggregate --total-workers {params.workers} --libraries {wildcards.library}
@@ -270,6 +274,25 @@ rule unzip_counts:
     shell:
         "gunzip {input}"
 
+rule unzip_quant_metrics:
+    input:
+        os.path.join(PROJECT_DIR, "{library}/{library}.quant_metrics.tsv.gz")
+    output:
+        os.path.join(PROJECT_DIR, "{library}/{library}.quant_metrics.tsv")
+    shell:
+        "gunzip {input}"
+
+rule plot_quant_metrics:
+    input:
+        metrics=os.path.join(PROJECT_DIR, "{library}/{library}.quant_metrics.tsv")
+    output:
+        aligned=os.path.join(PROJECT_DIR, "{library}", "plots",
+                            "{library}.alignment_distribution.png"),
+        umi=os.path.join(PROJECT_DIR, "{library}", "plots",
+                            "{library}.umi_distribution.png"),
+    script:
+        "scripts/plot_quant_metrics.py"
+
 rule annotate_cells:
     input:
         counts=os.path.join(PROJECT_DIR, "{library}/{library}.counts.tsv"),
@@ -279,6 +302,21 @@ rule annotate_cells:
     script:
         "scripts/annotate_libraries.py"
 
+rule merge_and_filter_count_matrices:
+    input:
+        expand(os.path.join(PROJECT_DIR, "{library}/{library}.counts.tsv"),
+               library=LIBRARIES.keys())
+    output:
+        X=os.path.join(config['base_dir'], config['run_id'], 'counts',
+                       "X.csv"),
+        obs=os.path.join(config['base_dir'], config['run_id'], 'counts',
+                         'obs.csv'),
+        var=os.path.join(config['base_dir'], config['run_id'], 'counts',
+                         'var.csv'),
+        metrics=os.path.join(config['bar_dir'], config['run_id'], 'counts',
+                           'metrics.csv'),
+    script:
+        "scripts/merge_and_filter.py"
 
     
 
