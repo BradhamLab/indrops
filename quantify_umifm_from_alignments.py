@@ -31,7 +31,7 @@ def quant(args):
     tx_to_gid = lambda tx: tx.replace('model', 'TU')
 
     umis_for_geneset = defaultdict(set)
-    sam_input = pysam.AlignmentFile('-', "r" )
+    sam_input = pysam.AlignmentFile(args.sam, "r" )
 
     # Tuple containing lengths of reference sequences
     ref_lengths = copy(sam_input.lengths)
@@ -54,7 +54,6 @@ def quant(args):
     def process_read_alignments(alignments):
         """input: one-element list of a single alignment from a bam file 
         corresponding to a given barcode"""
-
         # Remove any alignments that aren't supported by a certain number of non-poly A bases.
         dependent_on_polyA_tail = False
         if args.min_non_polyA > 0:
