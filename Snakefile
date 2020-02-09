@@ -61,7 +61,7 @@ for each in project_config['sequencing_runs']:
     for lib in each['libraries']:
         RUN_LIBRARIES.append((run, lib['library_name']))
         LIBRARIES[lib['library_name']] = lib['library_index']
-WORKERS = range(config['cores'])
+WORKERS = range(config['cores']['quantify_barcodes'])
 SPLITS = ['L001', 'L002', 'L003', 'L004']
 READS = ['R1', 'R2', 'R3', 'R4']
 # expected output from calling bcl2fastq
@@ -243,12 +243,16 @@ rule quantify_barcodes:
         os.path.join(config['base_dir'], config['run_id'], '{library}_sort_reads.out'),
         yaml=ancient(config['yaml']),
     output:
-        os.path.join(PROJECT_DIR, "{library}", "quant_dir", "worker{worker}_"\
-                     + str(config['cores']) + ".counts.tsv")
+        [os.path.join(PROJECT_DIR, "{library}", "quant_dir",
+                      "worker{i}_".format(i)\
+                      + str(config['cores']['quantify_barcodes'])\
+                      + ".counts.tsv")\
+         for i in range(config['cores']['quantify_barcodes'])]
     params:
         workers=config['cores']
     shell:
         """
+        for i in {0..}
         python indrops.py {input.yaml} quantify --libraries {wildcards.library} --total-workers {params.workers} --worker-index {wildcards.worker} --no-bam
         """
 
