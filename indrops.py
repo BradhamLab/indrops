@@ -903,26 +903,10 @@ class IndropsLibrary():
         if self.project.parameters['output_arguments']['output_unaligned_reads_to_other_fastq']:
             bowtie_cmd += ['--un', unaligned_reads_output]
             unaligned = 'Fastx'
-        barcode_path = os.path.join(os.path.split(self.paths.quant_dir)[0],
-                                                  'barcode_fastq',
-                                                  '%s.%s.fastq' % (self.name,
-                                                                   barcode))
-        output_prefix = os.path.join(self.paths.quant_dir, "STAR",
-                                     barcode + '/')
-        aligned_bam = os.path.join(output_prefix, 'Aligned.out.bam')
-        if not os.path.exists(output_prefix):
-            os.makedirs(output_prefix)
-        # STAR command
-        star_cmd = ['STAR',
-                    '--runMode', 'alignReads',
-                    '--outSAMtype', 'SAM',
-                    '--readFilesCommand', 'cat',
-                    '--genomeDir', self.project.paths.bowtie_index,
-                    '--outFileNamePrefix', output_prefix,
-                    '--readFilesIn', barcode_path,
-                    '--outReadsUnmapped', unaligned,
-                    '--outStd', 'SAM',
-        ]
+        # barcode_path = os.path.join(os.path.split(self.paths.quant_dir)[0],
+        #                                           'barcode_fastq',
+        #                                           '%s.%s.fastq' % (self.name,
+        #                                                            barcode))
         STAR = True
  
         # Quantification command
@@ -944,9 +928,7 @@ class IndropsLibrary():
         ]
         if not no_bam:
             quant_cmd += ['--bam', aligned_bam]
-        
-        if STAR:
-            quant_cmd += ['--bam', aligned_bam]
+
         if write_header:
             quant_cmd += ['--write-header']
         
@@ -961,18 +943,14 @@ class IndropsLibrary():
         # print_to_stderr("Processes spawned...")
         # print_to_stderr("STAR command:\n\n" + ' '.join(star_cmd) + '\n')
         # align barcode fastq using star -- write to SAM
-        p1 = subprocess.Popen(star_cmd,
-                              stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE)
-        # quantify alignment using SAM passed from sam_to_stdout
-        p2 = subprocess.Popen(quant_cmd,
-                              stdin=p1.stdout,
-                              stderr=subprocess.PIPE)
-        
-        #TODO hack in STAR bam, probably hack in bam to pass to quant command
-        # n_line = 0
-        # reading standard in necessary for bowtie, not STAR
         if not STAR:
+            p1 = subprocess.Popen(bowtie_cmd,
+                                  stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE)
+            # quantify alignment using SAM passed from sam_to_stdout
+            p2 = subprocess.Popen(quant_cmd,
+                                  stdin=p1.stdout,
+                                  stderr=subprocess.PIPE)
             for line in self.get_reads_for_barcode(barcode, run_filter=run_filter):
                 # n_line += 1
                 try:
@@ -983,23 +961,70 @@ class IndropsLibrary():
                     print_to_stderr(p1.stderr.read())
                     raise Exception('\n === Error on piping data to bowtie ===')
 
-
             p1.stdin.close()
+            if p1.wait() != 0:
+                print_to_stderr('\n')
+                print_to_stderr(p1.stderr.read())
+                raise Exception('\n === Error on bowtie ===')
 
-        if p1.wait() != 0:
-            print_to_stderr('\n')
-            print_to_stderr(p1.stderr.read())
-            raise Exception('\n === Error on bowtie ===')
+            if p2.wait() != 0:
+                print_to_stderr(p2.stderr.read())
+                raise Exception('\n === Error on Quantification Script ===')
+            print_to_stderr(p2.stderr.read(), False)
+
+        else:
+                        # # STAR command
+            star_cmd = ['STAR',
+                        '--runMode', 'alignReads',
+                        '--outSAMtype', 'BAM',
+                        '--readFilesCommand', 'cat',
+                        '--genomeDir', self.project.paths.bowtie_index,
+                        '--outFileNamePrefix', output_prefix,
+                        '--readFilesIn', barcode_path,
+                        '--outReadsUnmapped', unaligned,
+                        '--quantMode', 'TranscriptomeSAM',
+            ]
+            sort_dir = os.path.join(os.path.split(self.paths.quant_dir)[0],
+                                    'sorted_bams')
+            star_bam = os.path.join(sort_dir, '%s.bam' % (barcode))
+            if not os.path.exists(os.path.split(self.paths.quant_dir)[0], 'sorted_bams'):
+                os.makedirs()
+            
+            p1 = subprocess.Popen(star_cmd,
+                                  stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE)
+            if p1.wait() != 0:
+                print_to_stderr(p1.stderr.read())
+                raise Exception('\n === Error in STAR ====')
+            
+            samtools_cmd = ['samtools', 'sort',
+                            output_prefix + 'Aligned.toTranscriptome.out.bam',
+                            '-o', star_bam']
+            
+            sort_bam = subprocess.Popen(samtools_cmd,
+                                        stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE)
+
+            if sort_bam.wait() != 0:
+                print_to_stderr(sort_bam.stderr.read())
+                raise Exception('\n === Error in samtools ====')
+
+            quant_cmd += ['--sam', star_bam]
+            p2 = subprocess.Popen(quant_cmd,
+                                  std.out=subprocess.PIPE,
+                                  std.err=subprocess.PIPE)
+
+            if p2.wait() != 0:
+                print_to_stderr(p2.stderr.read())
+                raise Exception('\n === Error on Quantification Script ===')
+            print_to_stderr(p2.stderr.read(), False)
         
         # if sam_to_stdout.wait() != 0:
         #     print_to_stderr('\n')
         #     print_to_stderr(sam_to_stdout.stderr.read())
         #     raise Exception('\n === Error in printing SAM file ===')
 
-        if p2.wait() != 0:
-            print_to_stderr(p2.stderr.read())
-            raise Exception('\n === Error on Quantification Script ===')
-        print_to_stderr(p2.stderr.read(), False)
+
 
         if no_bam:
             # We are done here
