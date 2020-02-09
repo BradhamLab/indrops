@@ -83,7 +83,7 @@ def sorted_output(library):
 
 def aggregate_input(wildcards):
     library_quant = [os.path.join(PROJECT_DIR, wildcards.library, "quant_dir",
-                     "worker{i}_".format(i=i) + str(config['cores']) + ".counts.tsv") \
+                     "worker{i}_".format(i=i) + str(config['cores']['quantify_barcodes']) + ".counts.tsv") \
                     for i in WORKERS]
     return library_quant
 
@@ -237,23 +237,27 @@ rule extract_barcodes:
             echo "Fail!"
         fi
         """
-
 rule quantify_barcodes:
     input:
         os.path.join(config['base_dir'], config['run_id'], '{library}_sort_reads.out'),
         yaml=ancient(config['yaml']),
     output:
-        [os.path.join(PROJECT_DIR, "{library}", "quant_dir",
-                      "worker{i}_".format(i)\
-                      + str(config['cores']['quantify_barcodes'])\
-                      + ".counts.tsv")\
-         for i in range(config['cores']['quantify_barcodes'])]
+        expand(os.path.join(PROJECT_DIR, "{{library}}", "quant_dir",
+                            "worker{i}_"\
+                            + str(config['cores']['quantify_barcodes'])\
+                            + ".counts.tsv"),
+              i=range(config['cores']['quantify_barcodes']),
+              allow_missing=True)
+        # [os.path.join(PROJECT_DIR, "{library}", "quant_dir") +\
+        #  "worker{i}_".format(i) + str(config['cores']['quantify_barcodes'])\
+        #  + ".counts.tsv" for i in range(config['cores']['quantify_barcodes'])]
     params:
-        workers=config['cores']
+        cores=config['cores']['quantify_barcodes']
     shell:
         """
-        for i in {0..}
-        python indrops.py {input.yaml} quantify --libraries {wildcards.library} --total-workers {params.workers} --worker-index {wildcards.worker} --no-bam
+        for i in {{0..{params.cores}}}; do
+            python indrops.py {input.yaml} quantify --libraries {wildcards.library} --total-workers {params.cores} --worker-index i --no-bam &
+        done;
         """
 
 rule aggregate_umis:
@@ -317,7 +321,7 @@ rule merge_and_filter_count_matrices:
                          'obs.csv'),
         var=os.path.join(config['base_dir'], config['run_id'], 'counts',
                          'var.csv'),
-        metrics=os.path.join(config['bar_dir'], config['run_id'], 'counts',
+        metrics=os.path.join(config['base_dir'], config['run_id'], 'counts',
                            'metrics.csv'),
     script:
         "scripts/merge_and_filter.py"
