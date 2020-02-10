@@ -61,7 +61,7 @@ for each in project_config['sequencing_runs']:
     for lib in each['libraries']:
         RUN_LIBRARIES.append((run, lib['library_name']))
         LIBRARIES[lib['library_name']] = lib['library_index']
-WORKERS = range(config['cores']['quantify_barcodes'])
+WORKERS = range(config['cores']['default'])
 SPLITS = ['L001', 'L002', 'L003', 'L004']
 READS = ['R1', 'R2', 'R3', 'R4']
 # expected output from calling bcl2fastq
@@ -176,7 +176,7 @@ rule filter_reads:
         os.path.join(config['base_dir'], config['run_id'],
                      "{library}_{run}_{worker}_filter.out")
     params:
-        workers=config['cores']
+        workers=config['cores']['default']
     log:
         "logs/{run}_{library}_{worker}_filter.log"
     shell:
@@ -252,11 +252,12 @@ rule quantify_barcodes:
         #  "worker{i}_".format(i) + str(config['cores']['quantify_barcodes'])\
         #  + ".counts.tsv" for i in range(config['cores']['quantify_barcodes'])]
     params:
-        cores=config['cores']['quantify_barcodes']
+        cores=config['cores']['quantify_barcodes'],
+        max_idx=config['cores']['quantify_barcodes'] - 1
     shell:
         """
         for i in {{0..{params.cores}}}; do
-            python indrops.py {input.yaml} quantify --libraries {wildcards.library} --total-workers {params.cores} --worker-index i --no-bam &
+            python indrops.py {input.yaml} quantify --libraries {wildcards.library} --total-workers {params.cores} --worker-index $i --no-bam &
         done;
         """
 
